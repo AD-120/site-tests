@@ -1,9 +1,26 @@
 
 import { Article, Difficulty, NewsItem } from './types';
 
-export const CATEGORIES = [
-  'All', 'Beginner מתחילים', 'Music', 'Food', 'Sport', 'Fashion', 'Health', 'Travel', 'Art'
+export interface CategoryDef {
+  id: string;
+  label: string;
+  color: string;
+}
+
+export const CATEGORY_DEFS: CategoryDef[] = [
+  { id: 'health', label: 'בְּרִיאוּת', color: '#f4d361' },
+  { id: 'fashion', label: 'אוֹפְנָה', color: '#e91e63' },
+  { id: 'sport', label: 'סְפּוֹרְט', color: '#3b71fe' },
+  { id: 'dialogue', label: 'דִּיאָלוֹג', color: '#A7D397' },
+  { id: 'culture', label: 'תַּרְבּוּת', color: '#A28497' },
+  { id: 'cinema', label: 'קוֹלְנוֹעַ', color: '#9AD0C2' },
+  { id: 'songs', label: 'שִׁירִים', color: '#EF4444' },
+  { id: 'blog', label: 'בְּלוֹג', color: '#F97316' },
+  { id: 'news', label: 'חֲדָשׁוֹת', color: '#F59E0B' },
+  { id: 'all', label: 'All', color: '#475569' },
 ];
+
+export const CATEGORIES = CATEGORY_DEFS.map(c => c.label);
 
 export const FEATURED_ARTICLES: Article[] = [
   {
