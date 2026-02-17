@@ -212,21 +212,21 @@ const App: React.FC = () => {
       </div>
       
       {quotaError && (
-        <div className="mx-6 mb-6 p-5 bg-orange-50 border border-orange-200 rounded-[24px] shadow-sm">
-          <p className="text-sm font-extrabold text-orange-700 mb-2">⏳ המכסה המשותפת מלאה</p>
-          <p className="text-xs text-orange-600 mb-4 leading-relaxed text-right">
-            כרגע יש עומס על המפתח החינמי. ניתן להמתין דקה ולנסות שוב, או לחבר מפתח אישי (פרויקט Billing) לשימוש ללא הגבלה.
+        <div className="mx-6 mb-6 p-5 bg-amber-50 border border-amber-200 rounded-[24px] shadow-sm">
+          <p className="text-sm font-extrabold text-amber-700 mb-2 text-right">⏳ המכסה המשותפת מלאה</p>
+          <p className="text-xs text-amber-600 mb-4 leading-relaxed text-right">
+            השימוש באפליקציה בחינם! בגלל עומס משתמשים כרגע, המכסה הגיעה לגבול. ניתן להמתין דקה ולנסות שוב, או לחבר מפתח אישי אם יש לך כזה.
           </p>
           <div className="flex gap-2">
             <button 
               onClick={handleRetry}
-              className="flex-1 py-3 bg-orange-600 text-white rounded-xl text-xs font-extrabold shadow-md hover:bg-orange-700 transition-all active:scale-95"
+              className="flex-1 py-3 bg-amber-600 text-white rounded-xl text-xs font-extrabold shadow-md hover:bg-amber-700 transition-all active:scale-95"
             >
               נסה שוב כעת
             </button>
             <button 
               onClick={handleConnectKey}
-              className="px-4 py-3 bg-white border border-orange-200 text-orange-600 rounded-xl text-xs font-extrabold"
+              className="px-4 py-3 bg-white border border-amber-200 text-amber-600 rounded-xl text-xs font-extrabold"
             >
               חבר מפתח
             </button>
@@ -281,7 +281,7 @@ const App: React.FC = () => {
         </div>
         
         {quotaError && (
-          <div className="bg-orange-500 text-white px-5 py-2.5 flex justify-between items-center animate-in slide-in-from-top">
+          <div className="bg-amber-500 text-white px-5 py-2.5 flex justify-between items-center animate-in slide-in-from-top">
             <span className="text-[11px] font-bold">המכסה מלאה. נסה שוב בעוד דקה.</span>
             <div className="flex gap-3">
               <button onClick={handleRetry} className="text-[11px] font-extrabold underline">נסה שוב</button>
@@ -407,36 +407,41 @@ const App: React.FC = () => {
         <div className={`absolute top-0 right-0 h-full bg-white transition-transform duration-400 w-[85%] px-8 py-20 flex flex-col ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`} onClick={e => e.stopPropagation()}>
           <button onClick={() => setIsSidebarOpen(false)} className="absolute top-5 right-5 text-4xl font-light">&times;</button>
           <div className="text-xl font-extrabold text-[#1d2b4f] mb-8 pb-4 border-b border-gray-100">👤 My Profile</div>
-          <div className="flex flex-col gap-6 text-[#1d2b4f] font-bold text-base flex-1">
-            <a href="#" className="hover:text-[#3b71fe]">My Account</a>
+          <div className="flex flex-col gap-6 text-[#1d2b4f] font-bold text-base flex-1 text-right">
+            <a href="#" className="hover:text-[#3b71fe]">החשבון שלי</a>
             <button onClick={handleConnectKey} className="text-right hover:text-[#3b71fe] flex items-center justify-between w-full">
-               <span>Settings</span>
+               <span>הגדרות חיבור</span>
                {hasUserKey && <span className="text-[9px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full uppercase tracking-tighter">Connected</span>}
             </button>
             <div className="mt-4 p-4 bg-gray-50 rounded-2xl">
-               <p className="text-[10px] text-gray-400 mb-1 font-extrabold uppercase">Status</p>
+               <p className="text-[10px] text-gray-400 mb-1 font-extrabold uppercase">Connection Status</p>
                <p className="text-xs font-bold text-[#1d2b4f]">
-                 {hasUserKey ? '✓ Personal API Key' : '• Shared Community Key'}
+                 {hasUserKey ? '✓ מפתח API אישי מחובר' : '• שימוש במכסה קהילתית (חינם)'}
                </p>
+               {!hasUserKey && (
+                 <p className="text-[10px] text-gray-500 mt-2 leading-relaxed text-right">
+                   אתה משתמש במכסה המשותפת של הקהילה. השירות ניתן בחינם לגמרי! אם המערכת איטית, ניתן להמתין דקה.
+                 </p>
+               )}
             </div>
           </div>
           
           <div className="mt-auto pt-6 border-t border-gray-100">
             <div className="bg-blue-50 p-4 rounded-2xl mb-4">
-              <p className="text-[10px] text-blue-700 mb-1 font-extrabold uppercase tracking-widest">Optional: Personal Key</p>
+              <p className="text-[10px] text-blue-700 mb-1 font-extrabold uppercase tracking-widest text-right">אופציונלי: מפתח אישי</p>
               <p className="text-[11px] text-blue-600 mb-3 leading-relaxed text-right">
-                אם המכסה המשותפת נגמרת לעיתים קרובות, ניתן לחבר מפתח אישי מפרויקט גוגל קלאוד.
+                למשתמשים כבדים שרוצים להימנע ממגבלות עומס, ניתן לחבר מפתח אישי.
               </p>
               <button 
                 onClick={handleConnectKey}
                 className="w-full py-3 bg-[#3b71fe] text-white rounded-xl text-sm font-bold shadow-md active:scale-95 transition-all"
               >
-                {hasUserKey ? 'Switch Project' : 'Connect API Key'}
+                {hasUserKey ? 'החלף מפתח' : 'חיבור מפתח אישי'}
               </button>
             </div>
             
             <hr className="border-gray-50 mb-4" />
-            <a href="#" className="text-[#e91e63] font-bold">Sign Out</a>
+            <a href="#" className="text-[#e91e63] font-bold text-right block">התנתק</a>
           </div>
         </div>
       </div>
