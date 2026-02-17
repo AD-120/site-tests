@@ -1,206 +1,355 @@
 
-import React, { useState } from 'react';
-import Sidebar from './components/Sidebar';
-import { FeaturedCard, TopicCard, NewsSmallItem, RecentItem } from './components/ArticleCards';
-import { CATEGORY_DEFS, FEATURED_ARTICLES, TOPIC_ARTICLES, NEWS_MAIN, NEWS_ITEMS, RECENT_ITEMS } from './constants';
-import { Difficulty } from './types';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import GoalTracker from './components/GoalTracker';
+import Waveform from './components/Waveform';
+import ActionChips from './components/ActionChips';
+import { SimulationState, Goal, Scenario } from './types';
+import { startSimulation, sendMessage, getHint, playTTS } from './services/geminiService';
 
-const LEVELS = [
-  { label: 'Beginner | מַתְחִילִים', value: Difficulty.Beginner },
-  { label: 'Intermediate | בֵּינוֹנִיִּים', value: Difficulty.Intermediate },
-  { label: 'Advanced | מִתְקַדְּמִים', value: Difficulty.Advanced }
+const SCENARIOS: Scenario[] = [
+  { id: 'cafe', title: 'Cafe', titleHe: 'בית קפה', emoji: '☕', description: 'Order your morning coffee and a pastry.', difficulty: 'Beginner' },
+  { id: 'shop', title: 'Visiting a Shop', titleHe: 'ביקור בחנות', emoji: '🛍️', description: 'Try on clothes and negotiate the price.', difficulty: 'Intermediate' },
+  { id: 'zoo', title: 'Visiting a Zoo', titleHe: 'ביקור בגן חיות', emoji: '🦁', description: 'Ask the zookeeper about the animals.', difficulty: 'Beginner' },
+  { id: 'emergency', title: 'Emergency Surgery', titleHe: 'ניתוח חירום', emoji: '🏥', description: 'Critical situation. Communicate with the team.', difficulty: 'Advanced' },
+  { id: 'insult', title: 'Insulting a Public Official', titleHe: 'העלבת עובד ציבור', emoji: '👮', description: 'A spicy encounter at the post office.', difficulty: 'Extreme' },
+  { id: 'mother-in-law', title: 'Mother-in-law Argument', titleHe: 'מריבה עם החמות', emoji: '👵', description: 'Survival of the fittest. Maintain your dignity.', difficulty: 'Extreme' },
 ];
 
 const App: React.FC = () => {
-  const [isSidebarOpen, setSidebarOpen] = useState(false);
-  const [activeFilter, setActiveFilter] = useState('All');
-  const [activeTab, setActiveTab] = useState('Reading'); // Defaulting to Reading to match screenshot highlight if needed
-  const [selectedLevel, setSelectedLevel] = useState(LEVELS[0]);
-  const [isLevelDropdownOpen, setIsLevelDropdownOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'articles' | 'conversation' | 'reading' | 'subscribe'>('articles');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
+  const [simulationState, setSimulationState] = useState<SimulationState | null>(null);
+  const [isListening, setIsListening] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSTTSupported, setIsSTTSupported] = useState(true);
+  const [isHintVisible, setIsHintVisible] = useState(false);
 
-  return (
-    <div className="min-h-screen bg-[#f4f7f9] flex justify-center selection:bg-[#3b71fe]/30">
-      {/* Mobile-style layout wrapper */}
-      <div className="w-full max-w-[420px] bg-white min-h-screen relative shadow-2xl flex flex-col pb-24 overflow-x-hidden">
-        
-        {/* Header */}
-        <header className="sticky top-0 bg-white z-[1000] border-b border-gray-100 px-5 py-5 flex justify-between items-center">
-          <div className="w-24">
-            <img src="https://i.ibb.co/3ykC6Wf/logo.png" alt="Steps to Hebrew" className="h-8 object-contain" />
-          </div>
-          <button 
-            onClick={() => setSidebarOpen(true)}
-            className="flex flex-col gap-1.5 p-1 group"
-          >
-            <span className="w-6 h-[2.5px] bg-[#1d2b4f] rounded-full"></span>
-            <span className="w-6 h-[2.5px] bg-[#1d2b4f] rounded-full"></span>
-            <span className="w-6 h-[2.5px] bg-[#1d2b4f] rounded-full"></span>
-          </button>
-        </header>
+  const recognitionRef = useRef<any>(null);
 
-        <Sidebar isOpen={isSidebarOpen} onClose={() => setSidebarOpen(false)} />
+  useEffect(() => {
+    if (!('webkitSpeechRecognition' in window) && !('speechRecognition' in window)) {
+      setIsSTTSupported(false);
+    }
+  }, []);
 
-        {/* Filter Bar with New Styling */}
-        <div className="flex items-center bg-white border-b border-gray-100 sticky top-[72px] z-[900] px-3 py-4">
-          <div className="flex items-center w-full bg-white">
-            {/* Level Dropdown Button (Static Style) */}
-            <div className="relative pr-3 border-r border-gray-200">
-              <button 
-                onClick={() => setIsLevelDropdownOpen(!isLevelDropdownOpen)}
-                className="flex items-center gap-4 bg-gray-200 text-[#1d2b4f] px-4 py-2.5 rounded-xl text-[12px] font-bold whitespace-nowrap transition-colors"
-              >
-                {selectedLevel.label}
-                <svg xmlns="http://www.w3.org/2000/svg" className={`h-3 w-3 text-gray-600 transition-transform ${isLevelDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
+  const handleStartScenario = async (scenario: Scenario) => {
+    setSelectedScenario(scenario);
+    setIsLoading(true);
+    try {
+      const initialState = await startSimulation(scenario.titleHe);
+      setSimulationState(initialState);
+      await playTTS(initialState.characterVoice);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-              {/* Dropdown Menu */}
-              {isLevelDropdownOpen && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setIsLevelDropdownOpen(false)}></div>
-                  <div className="absolute top-[110%] left-0 w-48 bg-white border border-gray-100 rounded-2xl shadow-xl z-20 py-2 overflow-hidden">
-                    {LEVELS.map((level) => (
-                      <button
-                        key={level.value}
-                        className={`w-full text-left px-4 py-3 text-[12px] font-bold hover:bg-gray-50 transition-colors ${selectedLevel.value === level.value ? 'text-[#3b71fe] bg-blue-50/50' : 'text-gray-700'}`}
-                        onClick={() => {
-                          setSelectedLevel(level);
-                          setIsLevelDropdownOpen(false);
-                        }}
-                      >
-                        {level.label}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
+  const handleSimResponse = useCallback(async (newState: SimulationState) => {
+    setSimulationState(newState);
+    setIsHintVisible(false);
+    if (newState.characterVoice) {
+      await playTTS(newState.characterVoice);
+    }
+  }, []);
+
+  const processUserInput = async (text: string) => {
+    if (!text.trim() || !selectedScenario) return;
+    setIsLoading(true);
+    try {
+      const newState = await sendMessage(text, selectedScenario.titleHe, simulationState?.goalStatus || []);
+      await handleSimResponse(newState);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const toggleListening = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'he-IL';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      processUserInput(transcript);
+    };
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => setIsListening(false);
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
+
+  const handleToggleHint = async () => {
+    if (isHintVisible) {
+      setIsHintVisible(false);
+      return;
+    }
+    if (simulationState?.hint) {
+      setIsHintVisible(true);
+    } else if (selectedScenario) {
+      setIsLoading(true);
+      try {
+        const newState = await getHint(simulationState?.screenText || "", selectedScenario.titleHe, simulationState?.goalStatus || []);
+        setSimulationState(newState);
+        setIsHintVisible(true);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  const renderArticlesView = () => (
+    <main className="pb-24">
+      <div className="flex gap-2.5 overflow-x-auto px-5 py-4 no-scrollbar">
+        <div className="filter-pill active">Beginner מתחילים</div>
+        <div className="filter-pill">Music</div>
+        <div className="filter-pill">Food</div>
+        <div className="filter-pill">Sport</div>
+        <div className="filter-pill">Fashion</div>
+      </div>
+
+      <section className="py-4">
+        <div className="flex justify-between items-center px-5 mb-3">
+          <h2 className="text-base font-extrabold text-[#1d2b4f]">Featured <span className="block text-[11px] text-[#3b71fe] font-semibold">מומלצים</span></h2>
+        </div>
+        <div className="flex gap-4 overflow-x-auto px-5 no-scrollbar snap-x snap-mandatory">
+          <div className="flex-none w-[280px] h-[300px] relative rounded-[20px] overflow-hidden bg-black snap-start">
+            <img src="https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&w=400" alt="Picnic" className="w-full h-full object-cover opacity-80" />
+            <div className="absolute top-[15px] left-[15px] px-2.5 py-1 bg-[#e91e63] rounded-md text-[10px] font-extrabold text-white">BLOG</div>
+            <div className="absolute bottom-0 p-5 text-white bg-gradient-to-t from-black/80 to-transparent w-full">
+              <h3 className="text-lg font-bold">פיקניק בפארק</h3>
+              <p className="text-sm">In the Park</p>
             </div>
-
-            {/* Scrollable Categories with Colored Bars */}
-            <div className="flex flex-1 gap-2.5 overflow-x-auto no-scrollbar pl-3 py-1">
-              {CATEGORY_DEFS.map(cat => (
-                <button
-                  key={cat.id}
-                  onClick={() => setActiveFilter(cat.label)}
-                  className={`flex items-center gap-2 whitespace-nowrap px-3.5 py-1.5 rounded-full text-[12px] font-bold transition-all border ${
-                    activeFilter === cat.label 
-                      ? 'bg-white border-gray-400 text-[#1d2b4f]' 
-                      : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400'
-                  }`}
-                >
-                  <span 
-                    className="w-1 h-3 rounded-full" 
-                    style={{ backgroundColor: cat.color }}
-                  ></span>
-                  {cat.label}
-                </button>
-              ))}
+          </div>
+          <div className="flex-none w-[280px] h-[300px] relative rounded-[20px] overflow-hidden bg-black snap-start">
+            <img src="https://images.unsplash.com/photo-1517466787929-bc90951d0974?auto=format&fit=crop&w=400" alt="Sport" className="w-full h-full object-cover opacity-80" />
+            <div className="absolute top-[15px] left-[15px] px-2.5 py-1 bg-[#3b71fe] rounded-md text-[10px] font-extrabold text-white">SPORT</div>
+            <div className="absolute bottom-0 p-5 text-white bg-gradient-to-t from-black/80 to-transparent w-full">
+              <h3 className="text-lg font-bold">מכבי חיפה</h3>
+              <p className="text-sm">Maccabi Haifa</p>
             </div>
           </div>
         </div>
+      </section>
 
-        {/* Main Content */}
-        <main className="flex-1 overflow-y-auto">
-          
-          {/* Featured Section */}
-          <section className="py-6">
-            <div className="px-5 mb-5">
-              <h2 className="text-[18px] font-extrabold text-[#1d2b4f] leading-tight">
-                Featured
-                <span className="block text-[12px] text-[#3b71fe] font-bold mt-0.5">מומלצים</span>
-              </h2>
+      <section className="py-4">
+        <div className="flex justify-between items-center px-5 mb-3">
+          <h2 className="text-base font-extrabold text-[#1d2b4f]">Culture & Art <span className="block text-[11px] text-[#3b71fe] font-semibold">תרבות ואמנות</span></h2>
+          <a href="#" className="text-xs font-bold text-[#3b71fe]">See all</a>
+        </div>
+        <div className="flex gap-4 overflow-x-auto px-5 no-scrollbar">
+          <div className="flex-none w-[160px] border border-gray-100 rounded-xl overflow-hidden">
+            <img src="https://images.unsplash.com/photo-1551103756-c4eb2da5268c?auto=format&fit=crop&w=300" className="w-full h-[100px] object-cover" alt="Museum" />
+            <div className="p-2.5">
+              <h4 className="text-[13px] font-bold text-[#1d2b4f] truncate">Museums in TLV</h4>
+              <p className="text-[10px] text-gray-400 mt-1">Intermediate · 5m</p>
             </div>
-            <div className="flex gap-4 overflow-x-auto no-scrollbar px-5 snap-x">
-              {FEATURED_ARTICLES.map(article => (
-                <div key={article.id} className="snap-start">
-                  <FeaturedCard article={article} />
-                </div>
-              ))}
+          </div>
+          <div className="flex-none w-[160px] border border-gray-100 rounded-xl overflow-hidden">
+            <img src="https://images.unsplash.com/photo-1513364776144-60967b0f800f?auto=format&fit=crop&w=300" className="w-full h-[100px] object-cover" alt="Art" />
+            <div className="p-2.5">
+              <h4 className="text-[13px] font-bold text-[#1d2b4f] truncate">Modern Art</h4>
+              <p className="text-[10px] text-gray-400 mt-1">Advanced · 8m</p>
             </div>
-          </section>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
 
-          {/* Topic Sections */}
-          {Object.entries(TOPIC_ARTICLES).map(([title, articles]) => (
-            <section key={title} className="py-4">
-              <div className="px-5 mb-3 flex justify-between items-end">
-                <h2 className="text-base font-extrabold text-[#1d2b4f]">
-                  {title} <span className="block text-[11px] text-[#3b71fe] font-bold">{title === 'Food' ? 'אוכל' : 'תרבות ואמנות'}</span>
-                </h2>
-                <a href="#" className="text-[12px] font-bold text-[#3b71fe]">See all</a>
+  const renderSceneSelection = () => (
+    <main className="pb-24 animate-in slide-in-from-right duration-300">
+      <div className="px-6 pt-8 pb-4">
+        <h1 className="text-2xl font-extrabold text-[#1d2b4f]">Choose a Scene <span className="block text-sm text-[#3b71fe] mt-1">בחר סצנה לאימון</span></h1>
+      </div>
+      <div className="grid grid-cols-1 gap-4 px-6">
+        {SCENARIOS.map((scene) => (
+          <button
+            key={scene.id}
+            onClick={() => handleStartScenario(scene)}
+            className="group relative flex flex-col bg-white border border-gray-100 rounded-[24px] p-5 text-right transition-all hover:border-[#3b71fe] hover:shadow-lg active:scale-[0.98]"
+          >
+            <div className="flex justify-between items-start mb-2">
+              <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
+                scene.difficulty === 'Extreme' ? 'bg-red-50 text-red-500' : 
+                scene.difficulty === 'Advanced' ? 'bg-orange-50 text-orange-500' :
+                'bg-blue-50 text-blue-500'
+              }`}>
+                {scene.difficulty}
+              </span>
+              <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">{scene.emoji}</span>
+            </div>
+            <h3 className="text-lg font-extrabold text-[#1d2b4f] mb-1">{scene.titleHe}</h3>
+            <p className="text-xs text-gray-400 font-medium">{scene.description}</p>
+          </button>
+        ))}
+      </div>
+    </main>
+  );
+
+  const renderConversationView = () => {
+    if (!selectedScenario) return renderSceneSelection();
+
+    if (!simulationState) {
+      return (
+        <div className="flex flex-col items-center justify-center h-[calc(100vh-160px)]">
+          <div className="w-10 h-10 border-4 border-[#3b71fe] border-t-transparent rounded-full animate-spin mb-4" />
+          <p className="text-[#1d2b4f] font-extrabold text-sm uppercase tracking-widest">Preparing {selectedScenario.title}...</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col h-[calc(100vh-160px)] animate-in fade-in">
+        <div className="flex items-center px-4 py-2 border-b border-gray-50">
+           <button onClick={() => { setSelectedScenario(null); setSimulationState(null); }} className="text-xs font-extrabold text-gray-400 hover:text-[#3b71fe]">
+             ← Back to Scenes
+           </button>
+        </div>
+        <GoalTracker goals={simulationState.goalStatus} />
+        
+        <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
+          <div className="relative mb-8">
+            <div className={`w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center transition-all duration-500 ${isLoading ? 'scale-90 opacity-50' : 'scale-100 shadow-lg'}`}>
+              <span className="text-5xl">{selectedScenario.emoji}</span>
+            </div>
+            {isLoading && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-full h-full border-2 border-[#3b71fe] border-t-transparent rounded-full animate-spin opacity-40" />
               </div>
-              <div className="flex gap-3.5 overflow-x-auto no-scrollbar px-5">
-                {articles.map(article => (
-                  <TopicCard key={article.id} article={article} />
-                ))}
-              </div>
-            </section>
-          ))}
+            )}
+          </div>
 
-          {/* News Section */}
-          <section className="py-6 px-5 bg-gradient-to-b from-white to-[#f4f7f9]">
-            <div className="flex items-center gap-2 mb-4">
-               <span className="w-2 h-6 bg-[#f4d361] rounded-sm"></span>
-               <h2 className="text-xl font-extrabold text-[#1d2b4f]">News</h2>
-            </div>
+          <div className="min-h-[140px] flex flex-col items-center gap-3">
+            <h1 className="text-xl font-extrabold text-[#1d2b4f] leading-tight">
+              {simulationState.screenText}
+            </h1>
             
-            <div className="grid grid-cols-1 gap-6">
-              <div className="relative rounded-3xl overflow-hidden shadow-lg h-64 cursor-pointer group">
-                <img src={NEWS_MAIN.image} alt={NEWS_MAIN.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                <div className="absolute top-4 left-4 bg-[#f4d361] text-[#1d2b4f] text-[10px] font-extrabold px-2 py-1 rounded">NEWS</div>
-                <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/80 to-transparent">
-                  <h3 className="text-white font-bold">{NEWS_MAIN.hebrewTitle}</h3>
-                  <p className="text-gray-300 text-xs">{NEWS_MAIN.title}</p>
+            {simulationState.correction && (
+              <div className="bg-yellow-50 border border-yellow-100 px-4 py-1.5 rounded-full animate-bounce">
+                <p className="text-[11px] font-bold text-yellow-700">💡 {simulationState.correction}</p>
+              </div>
+            )}
+
+            <div className="flex flex-col items-center w-full">
+              {!isHintVisible ? (
+                <button 
+                  onClick={handleToggleHint}
+                  className="w-10 h-10 bg-blue-50 text-[#3b71fe] rounded-full flex items-center justify-center shadow-sm hover:bg-blue-100 transition-colors"
+                  title="Show Hint"
+                >
+                  <span className="text-xl">💡</span>
+                </button>
+              ) : (
+                <div 
+                  className="bg-[#3b71fe] text-white px-4 py-2.5 rounded-2xl shadow-md cursor-pointer animate-in zoom-in-95 duration-200"
+                  onClick={() => setIsHintVisible(false)}
+                >
+                  <p className="text-[9px] uppercase font-extrabold tracking-widest opacity-80 mb-0.5">SAY THIS:</p>
+                  <p className="text-base font-bold">{simulationState.hint || '...שלוש, אני רוצה קפוצ׳ינו'}</p>
                 </div>
-              </div>
-
-              <div className="space-y-4">
-                {NEWS_ITEMS.map(item => (
-                  <NewsSmallItem key={item.id} item={item} />
-                ))}
-              </div>
+              )}
             </div>
-          </section>
+          </div>
 
-          {/* Recent Section */}
-          <section className="py-6 px-5">
-             <div className="flex justify-between items-center mb-4 border-b border-gray-200 pb-2">
-                <h2 className="text-lg font-extrabold text-[#1d2b4f] font-['Assistant'] tracking-tight">לָאַחֲרוֹנָה <span className="text-[#3b71fe] font-sans ml-2 text-sm">Recent</span></h2>
-             </div>
-             <div className="space-y-3">
-                {RECENT_ITEMS.map(item => (
-                  <RecentItem key={item.id} item={item} />
-                ))}
-             </div>
-          </section>
+          <div className="mt-6 h-8">
+             <Waveform isListening={isListening} />
+          </div>
+        </div>
 
-        </main>
+        <div className="px-5 py-6 bg-white border-t border-gray-100 flex flex-col gap-4 items-center">
+          <ActionChips onChipClick={processUserInput} />
 
-        {/* Bottom Tab Bar */}
-        <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[420px] bg-white/95 backdrop-blur-lg border-t border-gray-100 flex justify-evenly pt-4 pb-8 z-[1000] shadow-[0_-5px_15px_rgba(0,0,0,0.03)]">
-          <button onClick={() => setActiveTab('Articles')} className={`flex flex-col items-center gap-1 flex-1 ${activeTab === 'Articles' ? 'text-[#3b71fe]' : 'text-gray-400'}`}>
-            <i className="fa-solid fa-file-lines text-xl"></i>
-            <span className="text-[10px] font-extrabold">Articles</span>
+          <div className="flex items-center justify-center w-full">
+            <div className="w-12" />
+            <button 
+              onClick={toggleListening}
+              disabled={isLoading}
+              className={`relative flex items-center justify-center w-20 h-20 rounded-full transition-all duration-300 shadow-xl active:scale-95 ${
+                isListening ? 'bg-[#e91e63] shadow-pink-100' : 'bg-[#3b71fe] shadow-blue-100'
+              } ${isLoading ? 'opacity-50' : ''}`}
+            >
+               {isListening && <span className="absolute inset-0 rounded-full animate-ping bg-[#e91e63] opacity-20" />}
+               <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+               </svg>
+            </button>
+            <div className="w-12" />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col min-h-screen bg-white shadow-2xl overflow-hidden relative">
+      <header className="sticky top-0 bg-white z-[100] px-5 py-4 border-b border-gray-100">
+        <div className="flex justify-between items-center">
+          <div className="h-8">
+            <img src="https://i.ibb.co/3ykC6Wf/logo.png" alt="Steps to Hebrew" className="h-full" />
+          </div>
+          <button onClick={() => setIsSidebarOpen(true)} className="flex flex-col gap-1.5 p-1">
+            <span className="w-6 h-[2.5px] bg-[#1d2b4f] rounded-full" />
+            <span className="w-6 h-[2.5px] bg-[#1d2b4f] rounded-full" />
+            <span className="w-6 h-[2.5px] bg-[#1d2b4f] rounded-full" />
           </button>
-          
-          <button onClick={() => setActiveTab('Conversation')} className={`flex flex-col items-center gap-1 flex-1 ${activeTab === 'Conversation' ? 'text-[#3b71fe]' : 'text-gray-400'}`}>
-            <i className="fa-solid fa-comment-dots text-xl"></i>
-            <span className="text-[10px] font-extrabold">Conversation</span>
-          </button>
+        </div>
+      </header>
 
-          <button onClick={() => setActiveTab('Reading')} className={`flex flex-col items-center gap-1 flex-1 ${activeTab === 'Reading' ? 'text-[#3b71fe]' : 'text-gray-400'}`}>
-            <i className="fa-solid fa-book-open text-xl"></i>
-            <span className="text-[10px] font-extrabold whitespace-nowrap">Reading course</span>
-          </button>
+      <div className="flex-1 overflow-y-auto no-scrollbar">
+        {activeTab === 'articles' ? renderArticlesView() : renderConversationView()}
+      </div>
 
-          <button onClick={() => setActiveTab('Subscribe')} className={`flex flex-col items-center gap-1 flex-1 ${activeTab === 'Subscribe' ? 'text-[#3b71fe]' : 'text-[#3b71fe]/60'}`}>
-            <div className="relative">
-              <i className="fa-solid fa-star text-xl"></i>
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#e91e63] rounded-full border-2 border-white"></span>
-            </div>
-            <span className="text-[10px] font-extrabold">Subscribe</span>
-          </button>
-        </nav>
+      <nav className="fixed bottom-0 w-full max-w-[390px] bg-white border-t border-gray-100 flex justify-evenly items-end py-3 px-2 z-[1000] shadow-[0_-10px_30px_rgba(0,0,0,0.03)]">
+        <button onClick={() => { setActiveTab('subscribe'); }} className={`flex flex-col items-center flex-1 gap-1 ${activeTab === 'subscribe' ? 'text-[#3b71fe]' : 'text-gray-300'}`}>
+          <span className="text-xl">⭐</span>
+          <span className="text-[10px] font-extrabold uppercase">Subscribe</span>
+        </button>
+        <button onClick={() => { setActiveTab('reading'); }} className={`flex flex-col items-center flex-1 gap-1 ${activeTab === 'reading' ? 'text-[#3b71fe]' : 'text-gray-300'}`}>
+          <span className="text-xl">📚</span>
+          <span className="text-[10px] font-extrabold uppercase">Reading</span>
+        </button>
+        <button onClick={() => { setActiveTab('conversation'); }} className={`flex flex-col items-center flex-1 gap-1 ${activeTab === 'conversation' ? 'text-[#3b71fe]' : 'text-gray-300'}`}>
+          <span className="text-xl">💬</span>
+          <span className="text-[10px] font-extrabold uppercase">Conversation</span>
+        </button>
+        <button onClick={() => { setActiveTab('articles'); }} className={`flex flex-col items-center flex-1 gap-1 ${activeTab === 'articles' ? 'text-[#3b71fe]' : 'text-gray-300'}`}>
+          <span className="text-xl">📄</span>
+          <span className="text-[10px] font-extrabold uppercase">Articles</span>
+        </button>
+      </nav>
+
+      <div className={`fixed inset-0 z-[2000] bg-black/40 transition-opacity duration-300 ${isSidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setIsSidebarOpen(false)}>
+        <div className={`absolute top-0 right-0 h-full bg-white transition-transform duration-400 w-[85%] px-8 py-20 flex flex-col ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`} onClick={e => e.stopPropagation()}>
+          <button onClick={() => setIsSidebarOpen(false)} className="absolute top-5 right-5 text-4xl font-light">&times;</button>
+          <div className="text-xl font-extrabold text-[#1d2b4f] mb-8 pb-4 border-b border-gray-100">👤 Welcome back!</div>
+          <div className="flex flex-col gap-6 text-[#1d2b4f] font-bold text-base">
+            <a href="#">My Account</a>
+            <a href="#">Orders</a>
+            <a href="#">Special Offers</a>
+            <a href="#">Customer Service</a>
+            <a href="#">Settings</a>
+            <hr className="border-gray-50" />
+            <a href="#" className="text-[#e91e63]">Sign Out</a>
+          </div>
+        </div>
       </div>
     </div>
   );

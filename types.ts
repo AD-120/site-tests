@@ -1,25 +1,30 @@
 
-export enum Difficulty {
-  Beginner = 'Beginner',
-  Intermediate = 'Intermediate',
-  Advanced = 'Advanced'
+export interface Goal {
+  id: string;
+  label: string;
+  emoji: string;
+  status: 'Pending' | 'Completed';
 }
 
-export interface Article {
+export interface Scenario {
   id: string;
   title: string;
-  hebrewTitle: string;
-  category: string;
-  image: string;
-  difficulty: Difficulty;
-  readTime: string;
-  isFeatured?: boolean;
+  titleHe: string;
+  emoji: string;
+  description: string;
+  difficulty: 'Beginner' | 'Intermediate' | 'Advanced' | 'Extreme';
+  isLocked?: boolean;
 }
 
-export interface NewsItem {
-  id: string;
-  title: string;
-  hebrewTitle: string;
-  image: string;
-  category: string;
+export interface SimulationState {
+  characterVoice: string;
+  screenText: string;
+  goalStatus: Goal[];
+  hint: string | null;
+  correction?: string;
+}
+
+export interface ChatMessage {
+  role: 'user' | 'model';
+  text: string;
 }

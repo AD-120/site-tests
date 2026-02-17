@@ -1,5 +1,7 @@
 {
-  "name": "Steps to Hebrew_articles",
-  "description": "An immersive Hebrew learning platform featuring articles, news, and cultural content designed to bridge language gaps through modern UI/UX.",
-  "requestFramePermissions": []
+  "name": "Steps to Hebrew - Cafe Simulator",
+  "description": "A high-end voice-based Hebrew conversation simulator for ordering at a cafe, featuring real-time feedback and goal tracking.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
 }
