@@ -24,6 +24,9 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSTTSupported, setIsSTTSupported] = useState(true);
   const [isHintVisible, setIsHintVisible] = useState(false);
+  const [hasUserKey, setHasUserKey] = useState(false);
+  const [quotaError, setQuotaError] = useState(false);
+  const [lastAction, setLastAction] = useState<(() => Promise<void>) | null>(null);
 
   const recognitionRef = useRef<any>(null);
 
@@ -31,20 +34,55 @@ const App: React.FC = () => {
     if (!('webkitSpeechRecognition' in window) && !('speechRecognition' in window)) {
       setIsSTTSupported(false);
     }
+    
+    const checkKey = async () => {
+      if ((window as any).aistudio?.hasSelectedApiKey) {
+        const hasKey = await (window as any).aistudio.hasSelectedApiKey();
+        setHasUserKey(hasKey);
+      }
+    };
+    checkKey();
   }, []);
 
-  const handleStartScenario = async (scenario: Scenario) => {
-    setSelectedScenario(scenario);
-    setIsLoading(true);
-    try {
-      const initialState = await startSimulation(scenario.titleHe);
-      setSimulationState(initialState);
-      await playTTS(initialState.characterVoice);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoading(false);
+  const handleConnectKey = async () => {
+    if ((window as any).aistudio?.openSelectKey) {
+      try {
+        await (window as any).aistudio.openSelectKey();
+        setHasUserKey(true);
+        setQuotaError(false);
+      } catch (e) {
+        console.error("Failed to open key selector", e);
+      }
     }
+  };
+
+  const handleRetry = async () => {
+    if (lastAction) {
+      setQuotaError(false);
+      await lastAction();
+    }
+  };
+
+  const handleStartScenario = async (scenario: Scenario) => {
+    const action = async () => {
+      setSelectedScenario(scenario);
+      setIsLoading(true);
+      setQuotaError(false);
+      try {
+        const initialState = await startSimulation(scenario.titleHe);
+        setSimulationState(initialState);
+        await playTTS(initialState.characterVoice);
+      } catch (err: any) {
+        console.error(err);
+        if (err?.message?.includes("429") || err?.message?.includes("quota")) {
+          setQuotaError(true);
+          setLastAction(() => action);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    await action();
   };
 
   const handleSimResponse = useCallback(async (newState: SimulationState) => {
@@ -57,15 +95,23 @@ const App: React.FC = () => {
 
   const processUserInput = async (text: string) => {
     if (!text.trim() || !selectedScenario) return;
-    setIsLoading(true);
-    try {
-      const newState = await sendMessage(text, selectedScenario.titleHe, simulationState?.goalStatus || []);
-      await handleSimResponse(newState);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
+    const action = async () => {
+      setIsLoading(true);
+      setQuotaError(false);
+      try {
+        const newState = await sendMessage(text, selectedScenario.titleHe, simulationState?.goalStatus || []);
+        await handleSimResponse(newState);
+      } catch (err: any) {
+        console.error(err);
+        if (err?.message?.includes("429") || err?.message?.includes("quota")) {
+          setQuotaError(true);
+          setLastAction(() => action);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    await action();
   };
 
   const toggleListening = () => {
@@ -102,16 +148,24 @@ const App: React.FC = () => {
     if (simulationState?.hint) {
       setIsHintVisible(true);
     } else if (selectedScenario) {
-      setIsLoading(true);
-      try {
-        const newState = await getHint(simulationState?.screenText || "", selectedScenario.titleHe, simulationState?.goalStatus || []);
-        setSimulationState(newState);
-        setIsHintVisible(true);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setIsLoading(false);
-      }
+      const action = async () => {
+        setIsLoading(true);
+        setQuotaError(false);
+        try {
+          const newState = await getHint(simulationState?.screenText || "", selectedScenario.titleHe, simulationState?.goalStatus || []);
+          setSimulationState(newState);
+          setIsHintVisible(true);
+        } catch (err: any) {
+          console.error(err);
+          if (err?.message?.includes("429") || err?.message?.includes("quota")) {
+            setQuotaError(true);
+            setLastAction(() => action);
+          }
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      await action();
     }
   };
 
@@ -148,29 +202,6 @@ const App: React.FC = () => {
           </div>
         </div>
       </section>
-
-      <section className="py-4">
-        <div className="flex justify-between items-center px-5 mb-3">
-          <h2 className="text-base font-extrabold text-[#1d2b4f]">Culture & Art <span className="block text-[11px] text-[#3b71fe] font-semibold">תרבות ואמנות</span></h2>
-          <a href="#" className="text-xs font-bold text-[#3b71fe]">See all</a>
-        </div>
-        <div className="flex gap-4 overflow-x-auto px-5 no-scrollbar">
-          <div className="flex-none w-[160px] border border-gray-100 rounded-xl overflow-hidden">
-            <img src="https://images.unsplash.com/photo-1551103756-c4eb2da5268c?auto=format&fit=crop&w=300" className="w-full h-[100px] object-cover" alt="Museum" />
-            <div className="p-2.5">
-              <h4 className="text-[13px] font-bold text-[#1d2b4f] truncate">Museums in TLV</h4>
-              <p className="text-[10px] text-gray-400 mt-1">Intermediate · 5m</p>
-            </div>
-          </div>
-          <div className="flex-none w-[160px] border border-gray-100 rounded-xl overflow-hidden">
-            <img src="https://images.unsplash.com/photo-1513364776144-60967b0f800f?auto=format&fit=crop&w=300" className="w-full h-[100px] object-cover" alt="Art" />
-            <div className="p-2.5">
-              <h4 className="text-[13px] font-bold text-[#1d2b4f] truncate">Modern Art</h4>
-              <p className="text-[10px] text-gray-400 mt-1">Advanced · 8m</p>
-            </div>
-          </div>
-        </div>
-      </section>
     </main>
   );
 
@@ -179,6 +210,30 @@ const App: React.FC = () => {
       <div className="px-6 pt-8 pb-4">
         <h1 className="text-2xl font-extrabold text-[#1d2b4f]">Choose a Scene <span className="block text-sm text-[#3b71fe] mt-1">בחר סצנה לאימון</span></h1>
       </div>
+      
+      {quotaError && (
+        <div className="mx-6 mb-6 p-5 bg-orange-50 border border-orange-200 rounded-[24px] shadow-sm">
+          <p className="text-sm font-extrabold text-orange-700 mb-2">⏳ המכסה המשותפת מלאה</p>
+          <p className="text-xs text-orange-600 mb-4 leading-relaxed text-right">
+            כרגע יש עומס על המפתח החינמי. ניתן להמתין דקה ולנסות שוב, או לחבר מפתח אישי (פרויקט Billing) לשימוש ללא הגבלה.
+          </p>
+          <div className="flex gap-2">
+            <button 
+              onClick={handleRetry}
+              className="flex-1 py-3 bg-orange-600 text-white rounded-xl text-xs font-extrabold shadow-md hover:bg-orange-700 transition-all active:scale-95"
+            >
+              נסה שוב כעת
+            </button>
+            <button 
+              onClick={handleConnectKey}
+              className="px-4 py-3 bg-white border border-orange-200 text-orange-600 rounded-xl text-xs font-extrabold"
+            >
+              חבר מפתח
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 px-6">
         {SCENARIOS.map((scene) => (
           <button
@@ -208,6 +263,7 @@ const App: React.FC = () => {
     if (!selectedScenario) return renderSceneSelection();
 
     if (!simulationState) {
+      if (quotaError) return renderSceneSelection();
       return (
         <div className="flex flex-col items-center justify-center h-[calc(100vh-160px)]">
           <div className="w-10 h-10 border-4 border-[#3b71fe] border-t-transparent rounded-full animate-spin mb-4" />
@@ -219,10 +275,21 @@ const App: React.FC = () => {
     return (
       <div className="flex flex-col h-[calc(100vh-160px)] animate-in fade-in">
         <div className="flex items-center px-4 py-2 border-b border-gray-50">
-           <button onClick={() => { setSelectedScenario(null); setSimulationState(null); }} className="text-xs font-extrabold text-gray-400 hover:text-[#3b71fe]">
+           <button onClick={() => { setSelectedScenario(null); setSimulationState(null); setQuotaError(false); }} className="text-xs font-extrabold text-gray-400 hover:text-[#3b71fe]">
              ← Back to Scenes
            </button>
         </div>
+        
+        {quotaError && (
+          <div className="bg-orange-500 text-white px-5 py-2.5 flex justify-between items-center animate-in slide-in-from-top">
+            <span className="text-[11px] font-bold">המכסה מלאה. נסה שוב בעוד דקה.</span>
+            <div className="flex gap-3">
+              <button onClick={handleRetry} className="text-[11px] font-extrabold underline">נסה שוב</button>
+              <button onClick={handleConnectKey} className="text-[11px] font-extrabold underline">חבר מפתח</button>
+            </div>
+          </div>
+        )}
+
         <GoalTracker goals={simulationState.goalStatus} />
         
         <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
@@ -339,15 +406,37 @@ const App: React.FC = () => {
       <div className={`fixed inset-0 z-[2000] bg-black/40 transition-opacity duration-300 ${isSidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setIsSidebarOpen(false)}>
         <div className={`absolute top-0 right-0 h-full bg-white transition-transform duration-400 w-[85%] px-8 py-20 flex flex-col ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`} onClick={e => e.stopPropagation()}>
           <button onClick={() => setIsSidebarOpen(false)} className="absolute top-5 right-5 text-4xl font-light">&times;</button>
-          <div className="text-xl font-extrabold text-[#1d2b4f] mb-8 pb-4 border-b border-gray-100">👤 Welcome back!</div>
-          <div className="flex flex-col gap-6 text-[#1d2b4f] font-bold text-base">
-            <a href="#">My Account</a>
-            <a href="#">Orders</a>
-            <a href="#">Special Offers</a>
-            <a href="#">Customer Service</a>
-            <a href="#">Settings</a>
-            <hr className="border-gray-50" />
-            <a href="#" className="text-[#e91e63]">Sign Out</a>
+          <div className="text-xl font-extrabold text-[#1d2b4f] mb-8 pb-4 border-b border-gray-100">👤 My Profile</div>
+          <div className="flex flex-col gap-6 text-[#1d2b4f] font-bold text-base flex-1">
+            <a href="#" className="hover:text-[#3b71fe]">My Account</a>
+            <button onClick={handleConnectKey} className="text-right hover:text-[#3b71fe] flex items-center justify-between w-full">
+               <span>Settings</span>
+               {hasUserKey && <span className="text-[9px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full uppercase tracking-tighter">Connected</span>}
+            </button>
+            <div className="mt-4 p-4 bg-gray-50 rounded-2xl">
+               <p className="text-[10px] text-gray-400 mb-1 font-extrabold uppercase">Status</p>
+               <p className="text-xs font-bold text-[#1d2b4f]">
+                 {hasUserKey ? '✓ Personal API Key' : '• Shared Community Key'}
+               </p>
+            </div>
+          </div>
+          
+          <div className="mt-auto pt-6 border-t border-gray-100">
+            <div className="bg-blue-50 p-4 rounded-2xl mb-4">
+              <p className="text-[10px] text-blue-700 mb-1 font-extrabold uppercase tracking-widest">Optional: Personal Key</p>
+              <p className="text-[11px] text-blue-600 mb-3 leading-relaxed text-right">
+                אם המכסה המשותפת נגמרת לעיתים קרובות, ניתן לחבר מפתח אישי מפרויקט גוגל קלאוד.
+              </p>
+              <button 
+                onClick={handleConnectKey}
+                className="w-full py-3 bg-[#3b71fe] text-white rounded-xl text-sm font-bold shadow-md active:scale-95 transition-all"
+              >
+                {hasUserKey ? 'Switch Project' : 'Connect API Key'}
+              </button>
+            </div>
+            
+            <hr className="border-gray-50 mb-4" />
+            <a href="#" className="text-[#e91e63] font-bold">Sign Out</a>
           </div>
         </div>
       </div>
