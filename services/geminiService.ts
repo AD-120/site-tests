@@ -19,8 +19,39 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 1500): Pr
   }
 }
 
-// Fixed API key usage: process.env.API_KEY is used by default, but updated via aistudio interface if provided
-const getAiClient = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
+/**
+ * Helper to safely extract JSON from model output, handling potential markdown fences.
+ */
+function extractJson(text: string) {
+  if (!text) throw new Error("Empty response from model");
+  const trimmed = text.trim();
+  try {
+    // Attempt direct parse first
+    return JSON.parse(trimmed);
+  } catch (e) {
+    // If it fails, try to find content between ```json and ``` or ```
+    const match = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (match && match[1]) {
+      try {
+        return JSON.parse(match[1].trim());
+      } catch (e2) {
+        throw new Error("Failed to parse JSON even after extraction: " + e2);
+      }
+    }
+    throw new Error("Could not find or parse JSON in model response: " + trimmed.substring(0, 100));
+  }
+}
+
+// Ensure the API key is accessible. The prompt states it is injected.
+const getApiKey = () => {
+  const key = (process.env as any).API_KEY;
+  if (!key) {
+    console.warn("API_KEY might be missing from process.env");
+  }
+  return key || "";
+};
+
+const getAiClient = () => new GoogleGenAI({ apiKey: getApiKey() });
 
 const getSystemInstruction = (scenario: string) => `
 You are the "Steps to Hebrew" Conversation Simulator Engine.
@@ -35,7 +66,7 @@ OPERATIONAL RULES:
 6. Shadowing: If hint is needed, provide "SAY THIS: [Hebrew sentence]".
 7. Goals: Monitor the conversation and update 'goalStatus'. Each goal should have an emoji and a label. Ensure there are 2-3 goals relevant to the scenario.
 
-Return ONLY valid JSON.
+Return ONLY valid JSON that matches the provided schema.
 `;
 
 const RESPONSE_SCHEMA = {
@@ -52,7 +83,8 @@ const RESPONSE_SCHEMA = {
           label: { type: Type.STRING },
           emoji: { type: Type.STRING },
           status: { type: Type.STRING, enum: ["Pending", "Completed"] }
-        }
+        },
+        required: ["id", "label", "emoji", "status"]
       }
     },
     hint: { type: Type.STRING, nullable: true },
@@ -73,7 +105,7 @@ export const startSimulation = async (scenario: string): Promise<SimulationState
         responseSchema: RESPONSE_SCHEMA
       }
     });
-    return JSON.parse(response.text.trim());
+    return extractJson(response.text);
   });
 };
 
@@ -89,7 +121,7 @@ export const sendMessage = async (message: string, scenario: string, currentGoal
         responseSchema: RESPONSE_SCHEMA
       }
     });
-    return JSON.parse(response.text.trim());
+    return extractJson(response.text);
   });
 };
 
@@ -105,11 +137,12 @@ export const getHint = async (currentContext: string, scenario: string, currentG
         responseSchema: RESPONSE_SCHEMA
       }
     });
-    return JSON.parse(response.text.trim());
+    return extractJson(response.text);
   });
 };
 
 export const playTTS = async (text: string) => {
+  if (!text) return;
   try {
     const ai = getAiClient();
     const response: GenerateContentResponse = await withRetry(() => ai.models.generateContent({
